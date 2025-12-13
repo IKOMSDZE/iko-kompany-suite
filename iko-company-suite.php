@@ -22,6 +22,9 @@ if (!defined('IKO_CS_URL')) {
 require_once IKO_CS_DIR . 'inc/class-ev-elementor-vacations.php';
 require_once IKO_CS_DIR . 'inc/class-ev-elementor-vacations-autofill.php';
 require_once IKO_CS_DIR . 'inc/class-ev-company-suite-own-branch.php';
+require_once IKO_CS_DIR . 'inc/class-iko-vacation-shortcodes.php';
+require_once IKO_CS_DIR . 'inc/branch-helper.php';
+
 
 // Bootstrap
 add_action('plugins_loaded', function () {
