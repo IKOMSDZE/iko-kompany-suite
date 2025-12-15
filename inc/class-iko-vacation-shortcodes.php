@@ -59,7 +59,12 @@ class IKO_Vacation_Shortcodes {
             && ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $t2)) === $t2);
     }
 
-  
+
+    private static function parse_days($raw): int {
+        $n = (int)preg_replace('/[^\d\-]/', '', (string)$raw);
+        return max(0, $n);
+    }
+    
     private static function calc_days_between($start, $end): int {
         return CompanySuite_Helpers::calc_days_between($start, $end);
     }
@@ -357,14 +362,14 @@ class IKO_Vacation_Shortcodes {
                     
                     // Format dates nicely
                     if ($date_from) {
-                        $dt_from = self::parse_date($date_from);
+                        $dt_from = CompanySuite_Helpers::parse_date($date_from);
                         $date_from_display = $dt_from ? $dt_from->format('d/m/Y') : $date_from;
                     } else {
                         $date_from_display = '—';
                     }
-                    
+
                     if ($date_to) {
-                        $dt_to = self::parse_date($date_to);
+                        $dt_to = CompanySuite_Helpers::parse_date($date_to);
                         $date_to_display = $dt_to ? $dt_to->format('d/m/Y') : $date_to;
                     } else {
                         $date_to_display = '—';

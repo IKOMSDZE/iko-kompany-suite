@@ -1030,7 +1030,7 @@ class EV_Elementor_Vacations {
                     $this->set_user_position_code($edit_user, $pos_code);
                     $this->set_user_branch_code($edit_user,   $br_code);
 
-                    $new_phone = $this->CompanySuite_Helpers::get_positions_map()($new_phone);
+                    $new_phone = CompanySuite_Helpers::normalize_phone($new_phone);
                     if ($new_phone === '') delete_user_meta($edit_user, self::META_PHONE);
                     else update_user_meta($edit_user, self::META_PHONE, $new_phone);
 
