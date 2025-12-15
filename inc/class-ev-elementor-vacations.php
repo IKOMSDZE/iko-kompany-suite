@@ -8,9 +8,9 @@ class EV_Elementor_Vacations {
     const META_ANNUAL   = '_ev_vac_annual_allocation';
     const META_REMAIN   = '_ev_vac_remaining_days';
     const META_YEAR     = '_ev_vac_last_reset_year';
-    const META_POSITION = '_ev_vac_position';   // code like 001, 002, …
-    const META_BRANCH   = '_ev_branch';         // code like 101, 102, …
-    const META_BIRTHDAY = '_ev_birthday';       // canonical YYYY-MM-DD
+    const META_POSITION = '_ev_vac_position';
+    const META_BRANCH   = '_ev_branch';
+    const META_BIRTHDAY = '_ev_birthday';
     const META_PHONE    = '_ev_phone';
     const META_BDAY_SENT_YEAR = '_ev_bday_sms_year_sent';
 
@@ -24,7 +24,7 @@ class EV_Elementor_Vacations {
                 'user_field_key'     => '',
                 'block_if_insuff'    => 1,
                 'default_annual'     => 24,
-                'target'             => 'current', // kept for BC; ignored for matched forms
+                'target'             => 'current',
                 'positions'          => [],
                 'branches'           => [],
                 'branch_codes'       => [],
@@ -35,8 +35,15 @@ class EV_Elementor_Vacations {
                 'sms_admin_phone'    => '',
                 'sms_user_template'  => 'Happy Birthday, {name}! 🎉',
                 'sms_admin_template' => 'დღეს არის {count} თანამშრომლის დაბადების დღე: {list}',
-                'sms_send_hour'      => 11, // Asia/Tbilisi
-                'branch_home_map_raw'=> "", // per-branch home pages
+                'sms_send_hour'      => 11,
+                'branch_home_map_raw'=> "",
+                'start_field_key'    => 'start_date',
+                'end_field_key'      => 'date_to_include',
+                'type_field_key'     => 'vacation_type',
+                'working_days_key'   => 'vacation_days',
+                'calendar_days_key'  => 'number_of_calendar_days',
+                'status_field_key'   => 'status',
+                'branch_field_key'   => 'employee_branch',
             ]);
         }
         if (!wp_next_scheduled('ev_vacations_daily_event')) {
@@ -71,25 +78,25 @@ class EV_Elementor_Vacations {
 
         // Elementor form hooks
         add_action('elementor_pro/forms/validation',  [$this, 'validate_vacation_days_limit'], 10, 2);
-        add_action('elementor_pro/forms/new_record',  [$this, 'on_elementor_form'], 10, 2); // deduct only after validation passes
+        add_action('elementor_pro/forms/new_record',  [$this, 'on_elementor_form'], 10, 2);
 
         // Cron ensure & yearly reset
         add_action('init', [$this, 'ensure_cron']);
         add_action('ev_vacations_daily_event', [$this, 'maybe_reset_all_users']);
         add_action('init', [$this, 'maybe_reset_all_users']);
 
-        
         // Branch-based homepage redirect
         add_action('template_redirect', [$this, 'maybe_redirect_branch_home']);
-// REST
+
+        // REST
         add_action('init',          [$this, 'register_user_meta_rest']);
         add_action('rest_api_init', [$this, 'register_rest_routes']);
         add_action('update_option_' . self::OPT, [$this, 'on_settings_saved'], 10, 2);
 
         // Shortcodes
         add_shortcode('vacation_days',    [$this, 'shortcode_vacation_days']);
-        add_shortcode('ev_vacation_days', [$this, 'shortcode_vacation_days']); // alias
-        add_shortcode('ev_user_admin',    [$this, 'shortcode_user_admin']);     // front-end user admin
+        add_shortcode('ev_vacation_days', [$this, 'shortcode_vacation_days']);
+        add_shortcode('ev_user_admin',    [$this, 'shortcode_user_admin']);
 
         // Birthday SMS cron
         add_action('ev_birthdays_daily_event', [$this, 'cron_send_birthday_sms']);
@@ -101,12 +108,12 @@ class EV_Elementor_Vacations {
         // Global delete logging
         add_action('deleted_user', [$this, 'on_deleted_user'], 10, 3);
 
-        // Elementor control noise workaround (3rd-party plugin bug)
+        // Elementor control noise workaround
         add_action('elementor/controls/register', function(){
             if (defined('WP_DEBUG') && WP_DEBUG) @ini_set('display_errors', '0');
         }, 1000);
 
-        // Datepicker (Flatpickr) for birthday fields (admin + front-end shortcode page)
+        // Datepicker
         add_action('admin_enqueue_scripts', [$this, 'enqueue_bday_picker']);
         add_action('wp_enqueue_scripts',    [$this, 'enqueue_bday_picker']);
     }
@@ -158,7 +165,7 @@ class EV_Elementor_Vacations {
         return apply_filters('company_suite/positions_map', $map);
     }
 
-    private function branches_map(): array {
+    public function branches_map(): array {
         $labels = $this->list_from_setting('branches');
         $opt    = get_option(self::OPT, []);
         $codes  = isset($opt['branch_codes']) && is_array($opt['branch_codes']) ? $opt['branch_codes'] : [];
@@ -185,6 +192,7 @@ class EV_Elementor_Vacations {
 
         return apply_filters('company_suite/branches_map', $map);
     }
+
     private function code_for_position_label(string $label): ?string {
         $label = trim($label);
         if ($label === '') return null;
@@ -207,8 +215,8 @@ class EV_Elementor_Vacations {
         $val = trim((string)$val);
         if ($val === '') return '';
         $pmap = $this->positions_map();
-        if (isset($pmap[$val])) return $val;          // already a code
-        $code = $this->code_for_position_label($val); // was a label
+        if (isset($pmap[$val])) return $val;
+        $code = $this->code_for_position_label($val);
         return $code ?: '';
     }
 
@@ -216,8 +224,8 @@ class EV_Elementor_Vacations {
         $val = trim((string)$val);
         if ($val === '') return '';
         $bmap = $this->branches_map();
-        if (isset($bmap[$val])) return $val;          // already a code
-        $code = $this->code_for_branch_label($val);   // was a label
+        if (isset($bmap[$val])) return $val;
+        $code = $this->code_for_branch_label($val);
         return $code ?: '';
     }
 
@@ -246,7 +254,7 @@ class EV_Elementor_Vacations {
         return $u->display_name ?: $u->user_email;
     }
 
-    /* ================= Phone helpers (CSV up to two numbers) ================= */
+    /* ================= Phone helpers ================= */
 
     private function normalize_phone_csv_two($raw): string {
         $s = (string)$raw;
@@ -258,7 +266,7 @@ class EV_Elementor_Vacations {
             $clean = preg_replace('/[^0-9+\s\-\(\)]/', '', $p);
             $clean = trim($clean);
             if ($clean !== '') $out[] = $clean;
-            if (count($out) >= 2) break; // at most two numbers
+            if (count($out) >= 2) break;
         }
         return implode(', ', $out);
     }
@@ -337,7 +345,7 @@ class EV_Elementor_Vacations {
         update_user_meta($user_id, self::META_YEAR, $year);
     }
 
-    /* ================= Resolve user from submitted form ================= */
+    /* ================= Resolve user from form ================= */
 
     private function resolve_user_from_field($value): int {
         $val = trim((string)$value);
@@ -377,15 +385,34 @@ class EV_Elementor_Vacations {
         return 0;
     }
 
-    /* ================= Elementor Validation (hard block if enabled) ================= */
+    /* ================= Form matching helper ================= */
+
+    private function form_matches(string $form_match, $record): bool {
+        if ($form_match === '') {
+            return true; // No filter = match all forms
+        }
+
+        // Get all possible identifiers from the form
+        $this_form_id    = (string) $record->get_form_settings('form_id');
+        $this_form_name  = (string) $record->get_form_settings('form_name');
+        $this_element_id = (string) $record->get_form_settings('id');
+
+        // Check if any of them match
+        return (
+            $form_match === $this_form_id || 
+            $form_match === $this_form_name || 
+            $form_match === $this_element_id
+        );
+    }
+
+    /* ================= Elementor Validation ================= */
 
     public function validate_vacation_days_limit( $record, $ajax_handler ) {
         $settings   = get_option(self::OPT, []);
         $form_match = trim((string)($settings['form_id'] ?? ''));
 
-        $this_form_id   = (string) $record->get_form_settings('form_id');
-        $this_form_name = (string) $record->get_form_settings('form_name');
-        if ($form_match !== '' && $form_match !== $this_form_id && $form_match !== $this_form_name) {
+        // Check if this form matches our target
+        if (!$this->form_matches($form_match, $record)) {
             return;
         }
 
@@ -439,11 +466,10 @@ class EV_Elementor_Vacations {
         $settings     = get_option(self::OPT, []);
         $days_key     = trim($settings['days_field_key'] ?? 'vacation_days');
         $form_id_set  = trim($settings['form_id'] ?? '');
-        $vac_type_key = 'vacation_type'; // '1' = earned leave
+        $vac_type_key = 'vacation_type';
 
-        $this_form_id   = (string) $record->get_form_settings('form_id');
-        $this_form_name = (string) $record->get_form_settings('form_name');
-        if ($form_id_set !== '' && $form_id_set !== $this_form_id && $form_id_set !== $this_form_name) {
+        // Check if this form matches our target
+        if (!$this->form_matches($form_id_set, $record)) {
             return;
         }
 
@@ -475,7 +501,6 @@ class EV_Elementor_Vacations {
 
         $remaining = $this->get_user_remaining($user_id);
 
-        // If blocking is disabled, allow and cap at 0 (no negative stored)
         if ( ! empty($settings['block_if_insuff']) && $days > $remaining ) {
             if (method_exists($handler, 'add_error_message')) { $handler->add_error_message(__('Not enough vacation days remaining.', 'ev-vac')); }
             if (method_exists($handler, 'add_error'))         { $handler->add_error($days_key ?: 'form', __('Not enough vacation days.', 'ev-vac')); }
@@ -486,12 +511,15 @@ class EV_Elementor_Vacations {
         $new_remaining = max(0, $remaining - $days);
         update_user_meta($user_id, self::META_REMAIN, $new_remaining);
 
+        // Log with form identifier for debugging
+        $form_identifier = (string)$record->get_form_settings('id') ?: (string)$record->get_form_settings('form_id') ?: (string)$record->get_form_settings('form_name');
+        
         if (method_exists($record, 'add_note')) {
-            $record->add_note(sprintf('EV: Deducted %d day(s) from user #%d (earned leave). Remaining: %d.', $days, $user_id, $new_remaining));
+            $record->add_note(sprintf('EV: Deducted %d day(s) from user #%d (earned leave). Remaining: %d. Form: %s', $days, $user_id, $new_remaining, $form_identifier));
         }
     }
 
-    /* ================= REST: meta + routes ================= */
+    /* ================= REST ================= */
 
     public function register_user_meta_rest() {
         register_meta('user', self::META_POSITION, [
@@ -540,12 +568,11 @@ class EV_Elementor_Vacations {
         wp_schedule_event(self::next_tbilisi_time_stamp($hour, 0), 'daily', 'ev_birthdays_daily_event');
     }
 
-    /* ================= Profile fields (admin) ================= */
+    /* ================= Profile fields ================= */
 
     public function profile_fields($user) {
         if (!current_user_can('list_users')) return;
 
-        // Migrate labels→codes if needed
         $pos_code = $this->normalize_position_meta(get_user_meta($user->ID, self::META_POSITION, true));
         $br_code  = $this->normalize_branch_meta(get_user_meta($user->ID, self::META_BRANCH,  true));
         if ($pos_code !== '' && $pos_code !== get_user_meta($user->ID, self::META_POSITION, true)) update_user_meta($user->ID, self::META_POSITION, $pos_code);
@@ -560,8 +587,8 @@ class EV_Elementor_Vacations {
         $annual    = ($annual === '') ? '' : (int)$annual;
         $remaining = ($remaining === '') ? '' : (int)$remaining;
 
-        $pmap = $this->positions_map(); // code=>label
-        $bmap = $this->branches_map();  // code=>label
+        $pmap = $this->positions_map();
+        $bmap = $this->branches_map();
         $opt  = get_option(self::OPT, []);
         $bd_on = !empty($opt['birthdays_enable']);
 
@@ -654,7 +681,7 @@ class EV_Elementor_Vacations {
         }
         if (isset($_POST['ev_birthday'])) {
             $raw  = sanitize_text_field(wp_unslash($_POST['ev_birthday']));
-            $norm = $this->parse_ui_birthday($raw); // UI → canonical
+            $norm = $this->parse_ui_birthday($raw);
             if ($norm === '') delete_user_meta($user_id, self::META_BIRTHDAY);
             else update_user_meta($user_id, self::META_BIRTHDAY, $norm);
         }
@@ -710,7 +737,16 @@ class EV_Elementor_Vacations {
             $out['user_field_key']  = isset($input['user_field_key']) ? sanitize_key($input['user_field_key']) : '';
             $out['block_if_insuff'] = !empty($input['block_if_insuff']) ? 1 : 0;
             $out['default_annual']  = max(0, (int)($input['default_annual'] ?? 24));
-            $out['target']          = ($input['target'] ?? 'current'); // kept for BC; ignored for matched forms
+            $out['target']          = ($input['target'] ?? 'current');
+
+            // Field mappings
+            $out['start_field_key']    = isset($input['start_field_key']) ? sanitize_key($input['start_field_key']) : 'start_date';
+            $out['end_field_key']      = isset($input['end_field_key']) ? sanitize_key($input['end_field_key']) : 'date_to_include';
+            $out['type_field_key']     = isset($input['type_field_key']) ? sanitize_key($input['type_field_key']) : 'vacation_type';
+            $out['working_days_key']   = isset($input['working_days_key']) ? sanitize_key($input['working_days_key']) : 'vacation_days';
+            $out['calendar_days_key']  = isset($input['calendar_days_key']) ? sanitize_key($input['calendar_days_key']) : 'number_of_calendar_days';
+            $out['status_field_key']   = isset($input['status_field_key']) ? sanitize_key($input['status_field_key']) : 'status';
+            $out['branch_field_key']   = isset($input['branch_field_key']) ? sanitize_key($input['branch_field_key']) : 'employee_branch';
 
             $positions_raw = isset($input['positions_text']) ? (string)$input['positions_text'] : '';
             $pos = [];
@@ -753,7 +789,6 @@ class EV_Elementor_Vacations {
 
             $out['birthdays_enable'] = !empty($input['birthdays_enable']) ? 1 : 0;
 
-            // SMS settings
             $out['sms_enabled']        = !empty($input['sms_enabled']) ? 1 : 0;
             $out['sms_api_key']        = isset($input['sms_api_key'])     ? sanitize_text_field($input['sms_api_key'])   : '';
             $out['sms_sender']         = isset($input['sms_sender'])      ? preg_replace('/[^A-Za-z0-9 ]/', '', substr($input['sms_sender'], 0, 11)) : '';
@@ -804,18 +839,79 @@ class EV_Elementor_Vacations {
                 <table class="form-table" role="presentation">
                     <tr>
                         <th scope="row"><label for="form_id"><?php esc_html_e('Elementor Form ID or Name', 'ev-vac'); ?></label></th>
-                        <td><input name="<?php echo self::OPT; ?>[form_id]" id="form_id" class="regular-text" type="text" value="<?php echo esc_attr($opt['form_id'] ?? ''); ?>"></td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="days_field_key"><?php esc_html_e('Days Field ID (Elementor)', 'ev-vac'); ?></label></th>
-                        <td><input name="<?php echo self::OPT; ?>[days_field_key]" id="days_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['days_field_key'] ?? 'vacation_days'); ?>"></td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="user_field_key"><?php esc_html_e('Employee Field ID (Elementor)', 'ev-vac'); ?></label></th>
-                        <td><input name="<?php echo self::OPT; ?>[user_field_key]" id="user_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['user_field_key'] ?? 'employee_name'); ?>">
-                            <p class="description"><?php esc_html_e('Custom ID of the Employee select (optional). If empty, common fallbacks will be tried.', 'ev-vac'); ?></p>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[form_id]" id="form_id" class="regular-text" type="text" value="<?php echo esc_attr($opt['form_id'] ?? ''); ?>">
+                            <p class="description"><?php esc_html_e('Can be form_id, form_name, or element_id (like 99ffe91). Leave empty to match all forms.', 'ev-vac'); ?></p>
                         </td>
                     </tr>
+                    
+                    <tr><th colspan="2"><h2 style="margin-top:20px;"><?php esc_html_e('Form Field Mappings', 'ev-vac'); ?></h2></th></tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="start_field_key"><?php esc_html_e('Start Date Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[start_field_key]" id="start_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['start_field_key'] ?? 'start_date'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="end_field_key"><?php esc_html_e('End Date Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[end_field_key]" id="end_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['end_field_key'] ?? 'date_to_include'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="type_field_key"><?php esc_html_e('Vacation Type Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[type_field_key]" id="type_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['type_field_key'] ?? 'vacation_type'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="working_days_key"><?php esc_html_e('Working Days Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[working_days_key]" id="working_days_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['working_days_key'] ?? 'vacation_days'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="calendar_days_key"><?php esc_html_e('Calendar Days Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[calendar_days_key]" id="calendar_days_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['calendar_days_key'] ?? 'number_of_calendar_days'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="status_field_key"><?php esc_html_e('Status Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[status_field_key]" id="status_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['status_field_key'] ?? 'status'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="branch_field_key"><?php esc_html_e('Branch Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[branch_field_key]" id="branch_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['branch_field_key'] ?? 'employee_branch'); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="days_field_key"><?php esc_html_e('Days Field ID (for deduction)', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[days_field_key]" id="days_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['days_field_key'] ?? 'vacation_days'); ?>">
+                            <p class="description"><?php esc_html_e('Used for deducting days from user balance', 'ev-vac'); ?></p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row"><label for="user_field_key"><?php esc_html_e('Employee Field ID', 'ev-vac'); ?></label></th>
+                        <td>
+                            <input name="<?php echo self::OPT; ?>[user_field_key]" id="user_field_key" class="regular-text" type="text" value="<?php echo esc_attr($opt['user_field_key'] ?? 'employee_name'); ?>">
+                            <p class="description"><?php esc_html_e('Custom ID of the Employee select (optional)', 'ev-vac'); ?></p>
+                        </td>
+                    </tr>
+                    
                     <tr>
                         <th scope="row"><label for="default_annual"><?php esc_html_e('Default Annual Allocation', 'ev-vac'); ?></label></th>
                         <td><input name="<?php echo self::OPT; ?>[default_annual]" id="default_annual" type="number" min="0" step="1" value="<?php echo esc_attr($opt['default_annual'] ?? 24); ?>"></td>
@@ -828,21 +924,21 @@ class EV_Elementor_Vacations {
                         <th scope="row"><label for="positions_text"><?php esc_html_e('Positions (one per line)', 'ev-vac'); ?></label></th>
                         <td>
                             <textarea name="<?php echo self::OPT; ?>[positions_text]" id="positions_text" rows="6" cols="50" class="large-text code"><?php echo esc_textarea($positions_text); ?></textarea>
-                            <p class="description"><?php esc_html_e('Order defines the internal codes (001, 002, 003…). Codes are hidden in the UI.', 'ev-vac'); ?></p>
+                            <p class="description"><?php esc_html_e('Order defines the internal codes (001, 002, 003…)', 'ev-vac'); ?></p>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="branches_text"><?php esc_html_e('Branches (one per line)', 'ev-vac'); ?></label></th>
                         <td>
                             <textarea name="<?php echo self::OPT; ?>[branches_text]" id="branches_text" rows="6" cols="50" class="large-text code"><?php echo esc_textarea($branches_text); ?></textarea>
-                            <p class="description"><?php esc_html_e('Order defines the internal codes (101, 102, 103…). Codes are hidden in the UI.', 'ev-vac'); ?></p>
+                            <p class="description"><?php esc_html_e('Format: 1001 | Branch Name or just Branch Name', 'ev-vac'); ?></p>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="ev_branch_home_map_raw"><?php esc_html_e('Branch Home Pages', 'ev-vac'); ?></label></th>
                         <td>
                             <textarea name="<?php echo self::OPT; ?>[branch_home_map_raw]" id="ev_branch_home_map_raw" rows="5" cols="50" class="large-text code"><?php echo esc_textarea($opt['branch_home_map_raw'] ?? ''); ?></textarea>
-                            <p class="description"><?php esc_html_e('Set custom home pages per branch. One per line: BRANCH_CODE = PAGE_ID (e.g. 1001 = 123).', 'ev-vac'); ?></p>
+                            <p class="description"><?php esc_html_e('Format: BRANCH_CODE = PAGE_ID (e.g. 1001 = 123)', 'ev-vac'); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -855,7 +951,7 @@ class EV_Elementor_Vacations {
                     <tr>
                       <th scope="row"><?php esc_html_e('Enable Birthday SMS', 'ev-vac'); ?></th>
                       <td><label><input type="checkbox" name="<?php echo self::OPT; ?>[sms_enabled]" value="1" <?php checked(!empty($opt['sms_enabled'])); ?>>
-                        <?php esc_html_e('Send SMS to users on their birthday and an admin summary.', 'ev-vac'); ?></label></td>
+                        <?php esc_html_e('Send SMS to users on their birthday', 'ev-vac'); ?></label></td>
                     </tr>
 
                     <tr>
@@ -882,7 +978,7 @@ class EV_Elementor_Vacations {
                     </tr>
 
                     <tr>
-                      <th scope="row"><label for="sms_admin_phone"><?php esc_html_e('Admin Phone (summary)', 'ev-vac'); ?></label></th>
+                      <th scope="row"><label for="sms_admin_phone"><?php esc_html_e('Admin Phone', 'ev-vac'); ?></label></th>
                       <td><input type="text" id="sms_admin_phone" class="regular-text" name="<?php echo self::OPT; ?>[sms_admin_phone]" value="<?php echo esc_attr($opt['sms_admin_phone'] ?? ''); ?>"></td>
                     </tr>
 
@@ -891,8 +987,7 @@ class EV_Elementor_Vacations {
                       <td>
                         <textarea id="sms_user_template" name="<?php echo self::OPT; ?>[sms_user_template]" rows="3" class="large-text code"><?php echo esc_textarea($opt['sms_user_template'] ?? 'Happy Birthday, {name}! 🎉'); ?></textarea>
                         <p class="description">
-                          <?php esc_html_e('Placeholders:', 'ev-vac'); ?>
-                          <code>{name}</code>, <code>{first_name}</code>, <code>{last_name}</code>
+                          <?php esc_html_e('Placeholders: {name}, {first_name}, {last_name}', 'ev-vac'); ?>
                         </p>
                       </td>
                     </tr>
@@ -922,7 +1017,7 @@ class EV_Elementor_Vacations {
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <?php wp_nonce_field('ev_sms_run_daily'); ?>
                 <input type="hidden" name="action" value="ev_sms_run_daily">
-                <label><input type="checkbox" name="ev_force_send" value="1"> <?php esc_html_e('Force today (clear sent flags for today first)', 'ev-vac'); ?></label>
+                <label><input type="checkbox" name="ev_force_send" value="1"> <?php esc_html_e('Force today (clear sent flags)', 'ev-vac'); ?></label>
                 <button class="button" type="submit"><?php esc_html_e('Run birthday check now', 'ev-vac'); ?></button>
             </form>
         </div>
@@ -960,7 +1055,7 @@ class EV_Elementor_Vacations {
                 <form method="post" style="margin-bottom:24px;">
                     <?php wp_nonce_field('ev_clear_log'); ?>
                     <input type="hidden" name="ev_log_name" value="<?php echo esc_attr($fname); ?>">
-                    <button class="button button-secondary" name="ev_clear_log" value="1" type="submit" onclick="return confirm('<?php echo esc_js(__('Clear this log?', 'ev-vac')); ?>'); ?>"><?php esc_html_e('Clear log', 'ev-vac'); ?></button>
+                    <button class="button button-secondary" name="ev_clear_log" value="1" type="submit" onclick="return confirm('<?php echo esc_js(__('Clear this log?', 'ev-vac')); ?>');"><?php esc_html_e('Clear log', 'ev-vac'); ?></button>
                 </form>
                 <hr>
             <?php endforeach; ?>
@@ -968,7 +1063,7 @@ class EV_Elementor_Vacations {
         <?php
     }
 
-    /* ================= Admin include helper for deletion ================= */
+    /* ================= Admin helpers ================= */
 
     private function ensure_user_admin_functions_loaded(): void {
         if (!function_exists('wp_delete_user')) {
@@ -979,25 +1074,14 @@ class EV_Elementor_Vacations {
         }
     }
 
-    /* ================= Delete permissions helper ================= */
-
     private function can_delete_user_row(int $target_user_id): bool {
-        // Must be logged in
         if (!is_user_logged_in()) return false;
-
-        // Never allow self-delete from this UI
         if ($target_user_id === get_current_user_id()) return false;
-
-        // Load target user
         $u = get_userdata($target_user_id);
         if (!$u) return false;
-
-        // If target is an Administrator, only allow site admins to delete
         if (is_array($u->roles) && in_array('administrator', $u->roles, true)) {
             return current_user_can('manage_options');
         }
-
-        // Otherwise allow deletion for anyone who can see the page
         return true;
     }
 
@@ -1027,7 +1111,6 @@ class EV_Elementor_Vacations {
     }
 
     public function shortcode_user_admin($atts = []) {
-
         // ===== Cap check (configurable) =====
         $a = shortcode_atts([
             'cap' => 'read', // visible to any logged-in user by default
@@ -1044,7 +1127,7 @@ class EV_Elementor_Vacations {
 
         // ===== Handle POST actions (Save / Delete) =====
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // DELETE action (allow any logged-in viewer, with guards handled by can_delete_user_row)
+            // DELETE action
             if (isset($_POST['evua_action']) && $_POST['evua_action'] === 'delete' && isset($_POST['_evua_del'])) {
                 $uid_del  = isset($_POST['evua_user']) ? (int) $_POST['evua_user'] : 0;
                 $nonce_ok = wp_verify_nonce($_POST['_evua_del'] ?? '', 'evua_delete_' . $uid_del);
@@ -1062,10 +1145,9 @@ class EV_Elementor_Vacations {
                         if (is_multisite() && function_exists('wpmu_delete_user')) {
                             wpmu_delete_user($uid_del);
                         } else {
-                            wp_delete_user($uid_del, null); // purge content
+                            wp_delete_user($uid_del, null);
                         }
 
-                        // Clear caches
                         if (function_exists('clean_user_cache')) clean_user_cache($uid_del);
                         wp_cache_delete($uid_del, 'users');
                         wp_cache_delete($uid_del, 'user_meta');
@@ -1096,7 +1178,6 @@ class EV_Elementor_Vacations {
                     $this->set_user_position_code($edit_user, $pos_code);
                     $this->set_user_branch_code($edit_user,   $br_code);
 
-                    // accept up to two numbers, CSV
                     $new_phone = $this->normalize_phone_csv_two($new_phone);
                     if ($new_phone === '') delete_user_meta($edit_user, self::META_PHONE);
                     else update_user_meta($edit_user, self::META_PHONE, $new_phone);
@@ -1166,18 +1247,15 @@ class EV_Elementor_Vacations {
 
         // --- filter "birthdays in next 30 days" ---
         if ($bd_on && $bdSoon) {
-            $self = $this; // capture instance for the closure
+            $self = $this;
 
             $users = array_values(array_filter($users, function($u) use ($self) {
                 $bd = get_user_meta($u->ID, EV_Elementor_Vacations::META_BIRTHDAY, true);
-
-                // Normalize to canonical and month-day
                 $md = $self->md_from_birthday((string)$bd);
-                if (!$md) return false; // no birthday set / unparsable
+                if (!$md) return false;
 
-                // Build a DateTime for the next occurrence of this birthday
                 try {
-                    $today = new \DateTime(current_time('Y-m-d')); // WP local date
+                    $today = new \DateTime(current_time('Y-m-d'));
                 } catch (\Throwable $e) {
                     $today = new \DateTime('now');
                 }
@@ -1188,11 +1266,9 @@ class EV_Elementor_Vacations {
                 if (!$next) return false;
 
                 if ($next < $today) {
-                    // already passed this year → take next year
                     $next->modify('+1 year');
                 }
 
-                // days difference
                 $diff_days = (int) $today->diff($next)->format('%a');
                 return $diff_days <= 30;
             }));
@@ -1204,7 +1280,7 @@ class EV_Elementor_Vacations {
         $pmap = $this->positions_map();
         $bmap = $this->branches_map();
 
-        // Normalize stored codes (one pass)
+        // Normalize stored codes
         foreach ($users as $u) {
             $pc = $this->normalize_position_meta(get_user_meta($u->ID, self::META_POSITION, true));
             $bc = $this->normalize_branch_meta(get_user_meta($u->ID, self::META_BRANCH,  true));
@@ -1233,7 +1309,6 @@ class EV_Elementor_Vacations {
         <div class="evua-wrap">
           <form class="toolbar" method="get">
             <?php
-              // keep existing query args except filters we manage
               foreach (['page_id','p','page'] as $keep) {
                   if (isset($_GET[$keep])) {
                       echo '<input type="hidden" name="'.esc_attr($keep).'" value="'.esc_attr($_GET[$keep]).'">';
@@ -1374,11 +1449,9 @@ class EV_Elementor_Vacations {
         </div>
 
         <script>
-          // small helper to auto-dismiss flashes
           setTimeout(function(){
             document.querySelectorAll('.evua-flash').forEach(function(el){ el.parentNode && el.parentNode.removeChild(el); });
           }, 3500);
-          // notify datepicker JS to (re)init in dynamic context
           jQuery(function($){ $(document).trigger('evua:rows-updated', [document]); });
         </script>
         <?php
@@ -1388,7 +1461,7 @@ class EV_Elementor_Vacations {
     private function set_user_position_code(int $user_id, string $code): void {
         $code = trim($code);
         $pmap = $this->positions_map();
-        if ($code !== '' && !isset($pmap[$code])) return; // invalid code
+        if ($code !== '' && !isset($pmap[$code])) return;
         $old = get_user_meta($user_id, self::META_POSITION, true);
         if ($old === $code) return;
         update_user_meta($user_id, self::META_POSITION, $code);
@@ -1399,7 +1472,7 @@ class EV_Elementor_Vacations {
     private function set_user_branch_code(int $user_id, string $code): void {
         $code = trim($code);
         $bmap = $this->branches_map();
-        if ($code !== '' && !isset($bmap[$code])) return; // invalid code
+        if ($code !== '' && !isset($bmap[$code])) return;
         $old = get_user_meta($user_id, self::META_BRANCH, true);
         if ($old === $code) return;
         update_user_meta($user_id, self::META_BRANCH, $code);
@@ -1428,331 +1501,309 @@ class EV_Elementor_Vacations {
         return ($code >= 200 && $code < 300) ? ($json ?: $body) : new WP_Error('sms_http', 'HTTP '.$code, ['body'=>$body]);
     }
 
-    private function bday_template(string $tpl, array $vars): string {
-        $out = $tpl;
-        foreach ($vars as $k=>$v) $out = str_replace('{'.$k.'}', $v, $out);
-        return $out;
+
+private function bday_template(string $tpl, array $vars): string {
+    $out = $tpl;
+    foreach ($vars as $k=>$v) $out = str_replace('{'.$k.'}', $v, $out);
+    return $out;
+}
+
+public function cron_send_birthday_sms() {
+    $opt = get_option(self::OPT, []);
+    if (empty($opt['birthdays_enable']) || empty($opt['sms_enabled'])) return;
+
+    $api_key     = trim((string)($opt['sms_api_key'] ?? ''));
+    $sender      = trim((string)($opt['sms_sender'] ?? ''));
+    $admin_phone = trim((string)($opt['sms_admin_phone'] ?? ''));
+    $tpl_user    = (string)($opt['sms_user_template']  ?? 'Happy Birthday, {name}! 🎉');
+    $tpl_admin   = (string)($opt['sms_admin_template'] ?? 'დღეს არის {count} თანამშრომლის დაბადების დღე: {list}');
+
+    if ($api_key === '' || $sender === '') {
+        $this->append_log_file('birthday.log', sprintf("[%s] SKIP: Missing sender/api.\n", current_time('Y-m-d H:i:s')));
+        return;
     }
 
-    public function cron_send_birthday_sms() {
-        $opt = get_option(self::OPT, []);
-        if (empty($opt['birthdays_enable']) || empty($opt['sms_enabled'])) return;
+    try { $tz = new \DateTimeZone('Asia/Tbilisi'); } catch (\Throwable $e) { $tz = null; }
+    $todayObj = $tz ? new \DateTime('now', $tz) : new \DateTime('now');
+    $todayY   = (int) $todayObj->format('Y');
+    $todayMD  = $todayObj->format('m-d');
 
-        $api_key     = trim((string)($opt['sms_api_key'] ?? ''));
-        $sender      = trim((string)($opt['sms_sender'] ?? ''));
-        $admin_phone = trim((string)($opt['sms_admin_phone'] ?? ''));
-        $tpl_user    = (string)($opt['sms_user_template']  ?? 'Happy Birthday, {name}! 🎉');
-        $tpl_admin   = (string)($opt['sms_admin_template'] ?? 'დღეს არის {count} თანამშრომლის დაბადების დღე: {list}');
+    $args = ['number' => 500, 'offset' => 0, 'fields' => ['ID']];
+    $sent_names = [];
 
-        if ($api_key === '' || $sender === '') {
-            $this->append_log_file('birthday.log', sprintf("[%s] SKIP: Missing sender/api.\n", current_time('Y-m-d H:i:s')));
-            return;
-        }
+    do {
+        $q = new \WP_User_Query($args);
+        $users = (array) $q->get_results();
+        if (!$users) break;
 
-        try { $tz = new \DateTimeZone('Asia/Tbilisi'); } catch (\Throwable $e) { $tz = null; }
-        $todayObj = $tz ? new \DateTime('now', $tz) : new \DateTime('now');
-        $todayY   = (int) $todayObj->format('Y');
-        $todayMD  = $todayObj->format('m-d');
+        foreach ($users as $u) {
+            $uid = (int) $u->ID;
+            $raw = (string) get_user_meta($uid, self::META_BIRTHDAY, true);
+            $md  = $this->md_from_birthday($raw);
+            if (!$md) continue;
+            if ($md !== $todayMD) continue;
 
-        $args = ['number' => 500, 'offset' => 0, 'fields' => ['ID']];
-        $sent_names = [];
+            $sent_year = (int) get_user_meta($uid, self::META_BDAY_SENT_YEAR, true);
+            if ($sent_year === $todayY) continue;
 
-        do {
-            $q = new \WP_User_Query($args);
-            $users = (array) $q->get_results();
-            if (!$users) break;
+            $user  = get_userdata($uid);
+            if (!$user) continue;
 
-            foreach ($users as $u) {
-                $uid = (int) $u->ID;
-                $raw = (string) get_user_meta($uid, self::META_BIRTHDAY, true);
-                $md  = $this->md_from_birthday($raw);
-                if (!$md) continue;
-                if ($md !== $todayMD) continue;
+            $name  = $this->get_full_name($user);
+            $first = trim((string) get_user_meta($uid, 'first_name', true));
+            $last  = trim((string) get_user_meta($uid, 'last_name',  true));
 
-                // prevent repeat within the same year
-                $sent_year = (int) get_user_meta($uid, self::META_BDAY_SENT_YEAR, true);
-                if ($sent_year === $todayY) continue;
+            $phones_raw = trim((string) get_user_meta($uid, self::META_PHONE, true));
+            if ($phones_raw !== '') {
+                $msg = $this->bday_template($tpl_user, [
+                    'name'        => $name,
+                    'first_name'  => ($first !== '' ? $first : $name),
+                    'last_name'   => $last,
+                ]);
 
-                $user  = get_userdata($uid);
-                if (!$user) continue;
-
-                $name  = $this->get_full_name($user);
-                $first = trim((string) get_user_meta($uid, 'first_name', true));
-                $last  = trim((string) get_user_meta($uid, 'last_name',  true));
-
-                // multi-target send (up to 2 numbers)
-                $phones_raw = trim((string) get_user_meta($uid, self::META_PHONE, true));
-                if ($phones_raw !== '') {
-                    $msg = $this->bday_template($tpl_user, [
-                        'name'        => $name,
-                        'first_name'  => ($first !== '' ? $first : $name),
-                        'last_name'   => $last,
-                    ]);
-
-                    $targets = array_map('trim', explode(',', $this->normalize_phone_csv_two($phones_raw)));
-                    $any_sent = false;
-                    foreach ($targets as $phone_one) {
-                        if ($phone_one === '') continue;
-                        $r = $this->sms_send($phone_one, $msg, $sender, $api_key);
-                        if (is_wp_error($r)) {
-                            $this->append_log_file('birthday.log', sprintf("[%s] ERROR UID %d (%s): %s\n", current_time('Y-m-d H:i:s'), $uid, $phone_one, $r->get_error_message()));
-                        } else {
-                            $this->append_log_file('birthday.log', sprintf("[%s] SENT UID %d (%s)\n", current_time('Y-m-d H:i:s'), $uid, $phone_one));
-                            $any_sent = true;
-                        }
+                $targets = array_map('trim', explode(',', $this->normalize_phone_csv_two($phones_raw)));
+                $any_sent = false;
+                foreach ($targets as $phone_one) {
+                    if ($phone_one === '') continue;
+                    $r = $this->sms_send($phone_one, $msg, $sender, $api_key);
+                    if (is_wp_error($r)) {
+                        $this->append_log_file('birthday.log', sprintf("[%s] ERROR UID %d (%s): %s\n", current_time('Y-m-d H:i:s'), $uid, $phone_one, $r->get_error_message()));
+                    } else {
+                        $this->append_log_file('birthday.log', sprintf("[%s] SENT UID %d (%s)\n", current_time('Y-m-d H:i:s'), $uid, $phone_one));
+                        $any_sent = true;
                     }
-
-                    if ($any_sent) {
-                        update_user_meta($uid, self::META_BDAY_SENT_YEAR, $todayY);
-                        $sent_names[] = $name;
-                    }
-                } else {
-                    $this->append_log_file('birthday.log', sprintf("[%s] SKIP UID %d: no phone\n", current_time('Y-m-d H:i:s'), $uid));
                 }
-            }
 
-            $args['offset'] += $args['number'];
-        } while (count($users) === $args['number']);
-
-        if ($sent_names && $admin_phone !== '') {
-            $count = count($sent_names);
-            $list  = implode(', ', $sent_names);
-            $admin_msg = $this->bday_template($tpl_admin, ['count' => (string)$count, 'list' => $list]);
-            $r = $this->sms_send($admin_phone, $admin_msg, $sender, $api_key);
-            if (is_wp_error($r)) {
-                $this->append_log_file('birthday.log', sprintf("[%s] ADMIN ERROR: %s\n", current_time('Y-m-d H:i:s'), $r->get_error_message()));
+                if ($any_sent) {
+                    update_user_meta($uid, self::META_BDAY_SENT_YEAR, $todayY);
+                    $sent_names[] = $name;
+                }
             } else {
-                $this->append_log_file('birthday.log', sprintf("[%s] ADMIN SENT: %d users\n", current_time('Y-m-d H:i:s'), $count));
+                $this->append_log_file('birthday.log', sprintf("[%s] SKIP UID %d: no phone\n", current_time('Y-m-d H:i:s'), $uid));
+            }
+        }
+
+        $args['offset'] += $args['number'];
+    } while (count($users) === $args['number']);
+
+    if ($sent_names && $admin_phone !== '') {
+        $count = count($sent_names);
+        $list  = implode(', ', $sent_names);
+        $admin_msg = $this->bday_template($tpl_admin, ['count' => (string)$count, 'list' => $list]);
+        $r = $this->sms_send($admin_phone, $admin_msg, $sender, $api_key);
+        if (is_wp_error($r)) {
+            $this->append_log_file('birthday.log', sprintf("[%s] ADMIN ERROR: %s\n", current_time('Y-m-d H:i:s'), $r->get_error_message()));
+        } else {
+            $this->append_log_file('birthday.log', sprintf("[%s] ADMIN SENT: %d users\n", current_time('Y-m-d H:i:s'), $count));
+        }
+    }
+}
+
+public function handle_sms_test() {
+    if (!current_user_can('manage_options') || !check_admin_referer('ev_sms_test')) {
+        wp_die(__('Permission denied.', 'ev-vac'));
+    }
+
+    $opt = get_option(self::OPT, []);
+    $api = trim((string)($opt['sms_api_key'] ?? ''));
+    $snd = trim((string)($opt['sms_sender']  ?? ''));
+
+    $to  = isset($_POST['ev_test_phone'])   ? preg_replace('/[^0-9+\s\-\(\)]/', '', wp_unslash($_POST['ev_test_phone'])) : '';
+    $msg = isset($_POST['ev_test_message']) ? wp_unslash($_POST['ev_test_message']) : '';
+
+    $res  = $this->sms_send($to, $msg, $snd, $api);
+    $text = is_wp_error($res) ? ('ERROR: '.$res->get_error_message()) : 'OK';
+
+    wp_safe_redirect(add_query_arg('ev_sms_test', rawurlencode($text), admin_url('admin.php?page=ev-vacations')));
+    exit;
+}
+
+public function handle_sms_run_daily() {
+    if (!current_user_can('manage_options') || !check_admin_referer('ev_sms_run_daily')) {
+        wp_die(__('Permission denied.', 'ev-vac'));
+    }
+    $force = !empty($_POST['ev_force_send']);
+    if ($force) {
+        try { $tz = new DateTimeZone('Asia/Tbilisi'); } catch (\Throwable $e) { $tz = null; }
+        $todayMD = ($tz ? new DateTime('now', $tz) : new DateTime('now'))->format('m-d');
+
+        $q = new WP_User_Query(['number' => 9999, 'fields' => ['ID']]);
+        foreach ((array)$q->get_results() as $u) {
+            $uid = (int)$u->ID;
+            $md  = $this->md_from_birthday((string)get_user_meta($uid, self::META_BIRTHDAY, true));
+            if ($md === $todayMD) {
+                delete_user_meta($uid, self::META_BDAY_SENT_YEAR);
+            }
+        }
+        $this->append_log_file('birthday.log', sprintf("[%s] FORCE: cleared sent flags for today\n", current_time('Y-m-d H:i:s')));
+    }
+
+    $this->cron_send_birthday_sms();
+    wp_safe_redirect(add_query_arg('ev_sms_daily', rawurlencode('ran'), admin_url('admin.php?page=ev-vacations')));
+    exit;
+}
+
+private function append_log_file(string $filename, string $line): void {
+    $file = plugin_dir_path(__FILE__) . $filename;
+    @file_put_contents($file, $line, FILE_APPEND);
+}
+
+public function on_deleted_user($deleted_user_id, $reassign = null, $user_obj = null) {
+    if (get_transient('ev_del_guard_'.$deleted_user_id)) {
+        delete_transient('ev_del_guard_'.$deleted_user_id);
+    }
+
+    if (function_exists('clean_user_cache')) clean_user_cache((int)$deleted_user_id);
+    wp_cache_delete((int)$deleted_user_id, 'users');
+    wp_cache_delete((int)$deleted_user_id, 'user_meta');
+
+    $target_name  = $user_obj ? ($user_obj->display_name ?: $user_obj->user_login) : ('#'.$deleted_user_id);
+    $target_email = $user_obj ? $user_obj->user_email : '';
+    $deleter      = wp_get_current_user();
+    $line = sprintf(
+        "[%s] User %s (ID %d; %s) deleted by %s (ID %d)\n",
+        current_time('Y-m-d H:i:s'),
+        $target_name,
+        (int)$deleted_user_id,
+        $target_email,
+        $deleter && $deleter->ID ? $deleter->user_login : 'system',
+        $deleter && $deleter->ID ? (int)$deleter->ID : 0
+    );
+    $this->append_log_file('deletion.log', $line);
+}
+
+/* ================= Datepicker ================= */
+
+public function enqueue_bday_picker($hook = '') {
+    $need = is_admin();
+    if (!$need && !is_admin()) {
+        $post_id = get_queried_object_id();
+        if ($post_id) {
+            $content = get_post_field('post_content', $post_id);
+            if ($content && has_shortcode($content, 'ev_user_admin')) {
+                $need = true;
             }
         }
     }
+    if (!$need) return;
 
-    public function handle_sms_test() {
-        if (!current_user_can('manage_options') || !check_admin_referer('ev_sms_test')) {
-            wp_die(__('Permission denied.', 'ev-vac'));
-        }
+    wp_enqueue_style( 'flatpickr', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css', [], '4.6.13' );
+    wp_enqueue_script('flatpickr', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js', ['jquery'], '4.6.13', true);
+    wp_enqueue_script('flatpickr-ka', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ka.js', ['flatpickr'], '4.6.13', true);
 
-        $opt = get_option(self::OPT, []);
-        $api = trim((string)($opt['sms_api_key'] ?? ''));
-        $snd = trim((string)($opt['sms_sender']  ?? ''));
-
-        $to  = isset($_POST['ev_test_phone'])   ? preg_replace('/[^0-9+\s\-\(\)]/', '', wp_unslash($_POST['ev_test_phone'])) : '';
-        $msg = isset($_POST['ev_test_message']) ? wp_unslash($_POST['ev_test_message']) : '';
-
-        $res  = $this->sms_send($to, $msg, $snd, $api);
-        $text = is_wp_error($res) ? ('ERROR: '.$res->get_error_message()) : 'OK';
-
-        wp_safe_redirect(add_query_arg('ev_sms_test', rawurlencode($text), admin_url('admin.php?page=ev-vacations')));
-        exit;
-    }
-
-    public function handle_sms_run_daily() {
-        if (!current_user_can('manage_options') || !check_admin_referer('ev_sms_run_daily')) {
-            wp_die(__('Permission denied.', 'ev-vac'));
-        }
-        $force = !empty($_POST['ev_force_send']);
-        if ($force) {
-            try { $tz = new DateTimeZone('Asia/Tbilisi'); } catch (\Throwable $e) { $tz = null; }
-            $todayMD = ($tz ? new DateTime('now', $tz) : new DateTime('now'))->format('m-d');
-
-            $q = new WP_User_Query([
-                'number'     => 9999,
-                'fields'     => ['ID'],
-            ]);
-            foreach ((array)$q->get_results() as $u) {
-                $uid = (int)$u->ID;
-                $md  = $this->md_from_birthday((string)get_user_meta($uid, self::META_BIRTHDAY, true));
-                if ($md === $todayMD) {
-                    delete_user_meta($uid, self::META_BDAY_SENT_YEAR);
-                }
-            }
-            $this->append_log_file('birthday.log', sprintf("[%s] FORCE: cleared sent flags for today\n", current_time('Y-m-d H:i:s')));
-        }
-
-        $this->cron_send_birthday_sms();
-        wp_safe_redirect(add_query_arg('ev_sms_daily', rawurlencode('ran'), admin_url('admin.php?page=ev-vacations')));
-        exit;
-    }
-
-    private function append_log_file(string $filename, string $line): void {
-        $file = plugin_dir_path(__FILE__) . $filename;
-        @file_put_contents($file, $line, FILE_APPEND);
-    }
-
-    public function on_deleted_user($deleted_user_id, $reassign = null, $user_obj = null) {
-        if (get_transient('ev_del_guard_'.$deleted_user_id)) {
-            delete_transient('ev_del_guard_'.$deleted_user_id); // consume
-        }
-
-        if (function_exists('clean_user_cache')) clean_user_cache((int)$deleted_user_id);
-        wp_cache_delete((int)$deleted_user_id, 'users');
-        wp_cache_delete((int)$deleted_user_id, 'user_meta');
-
-        $target_name  = $user_obj ? ($user_obj->display_name ?: $user_obj->user_login) : ('#'.$deleted_user_id);
-        $target_email = $user_obj ? $user_obj->user_email : '';
-        $deleter      = wp_get_current_user();
-        $line = sprintf(
-            "[%s] User %s (ID %d; %s) deleted by %s (ID %d)\n",
-            current_time('Y-m-d H:i:s'),
-            $target_name,
-            (int)$deleted_user_id,
-            $target_email,
-            $deleter && $deleter->ID ? $deleter->user_login : 'system',
-            $deleter && $deleter->ID ? (int)$deleter->ID : 0
-        );
-        $this->append_log_file('deletion.log', $line);
-    }
-
-    /* ================= Datepicker enqueue ================= */
-
-    public function enqueue_bday_picker($hook = '') {
-        $need = is_admin();
-        if (!$need && !is_admin()) {
-            $post_id = get_queried_object_id();
-            if ($post_id) {
-                $content = get_post_field('post_content', $post_id);
-                if ($content && has_shortcode($content, 'ev_user_admin')) {
-                    $need = true;
-                }
-            }
-        }
-        if (!$need) return;
-
-        wp_enqueue_style( 'flatpickr', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css', [], '4.6.13' );
-        wp_enqueue_script('flatpickr', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js', ['jquery'], '4.6.13', true);
-        wp_enqueue_script('flatpickr-ka', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ka.js', ['flatpickr'], '4.6.13', true);
-
-        $init = <<<'JS'
+    $init = <<<'JS'
 jQuery(function($){
-  function initBdayPicker(ctx){
-    var $inputs = $('.ev-bday', ctx || document);
-    if (!$inputs.length || typeof flatpickr === 'undefined') return;
-    $inputs.each(function(){
-      if (this.hasAttribute('data-fp')) return; // prevent double init
-      this.setAttribute('data-fp','1');
-      flatpickr(this, {
-        dateFormat: 'd/m/Y',
-        allowInput: true,
-        locale: (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.ka) ? window.flatpickr.l10ns.ka : 'ka',
-        altInput: false
-      });
-    });
-  }
-  initBdayPicker(document);
-  $(document).on('evua:rows-updated', function(e, ctx){ initBdayPicker(ctx || document); });
+function initBdayPicker(ctx){
+var $inputs = $('.ev-bday', ctx || document);
+if (!$inputs.length || typeof flatpickr === 'undefined') return;
+$inputs.each(function(){
+if (this.hasAttribute('data-fp')) return;
+this.setAttribute('data-fp','1');
+flatpickr(this, {
+dateFormat: 'd/m/Y',
+allowInput: true,
+locale: (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.ka) ? window.flatpickr.l10ns.ka : 'ka',
+altInput: false
+});
+});
+}
+initBdayPicker(document);
+$(document).on('evua:rows-updated', function(e, ctx){ initBdayPicker(ctx || document); });
 });
 JS;
-        wp_add_inline_script('flatpickr-ka', $init);
+wp_add_inline_script('flatpickr-ka', $init);
+}
+private function sanitize_branch_home_map_raw(string $raw): string {
+    $lines = preg_split('/\r\n|\r|\n/', $raw);
+    $clean = [];
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+
+        $parts = explode('=', $line, 2);
+        if (count($parts) !== 2) continue;
+
+        $branch_code = preg_replace('/\D+/', '', trim($parts[0]));
+        $page_id     = (int) trim($parts[1]);
+
+        if ($branch_code === '' || $page_id <= 0) continue;
+
+        $clean[] = $branch_code . ' = ' . $page_id;
     }
 
+    return implode("\n", $clean);
+}
 
-    /**
-     * Sanitize raw "branch => page_id" mapping textarea.
-     *
-     * Format (one per line):
-     *   1001 = 123
-     */
-    private function sanitize_branch_home_map_raw(string $raw): string {
-        $lines = preg_split('/\r\n|\r|\n/', $raw);
-        $clean = [];
+private function get_branch_home_map(): array {
+    $opt = get_option(self::OPT, []);
+    $raw = isset($opt['branch_home_map_raw']) ? (string)$opt['branch_home_map_raw'] : '';
 
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line === '') continue;
+    $map = [];
+    foreach (preg_split('/\r\n|\r|\n/', $raw) as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
 
-            $parts = explode('=', $line, 2);
-            if (count($parts) !== 2) continue;
+        $parts = explode('=', $line, 2);
+        if (count($parts) !== 2) continue;
 
-            $branch_code = preg_replace('/\D+/', '', trim($parts[0]));
-            $page_id     = (int) trim($parts[1]);
+        $branch_code = preg_replace('/\D+/', '', trim($parts[0]));
+        $page_id     = (int) trim($parts[1]);
 
-            if ($branch_code === '' || $page_id <= 0) continue;
+        if ($branch_code === '' || $page_id <= 0) continue;
 
-            $clean[] = $branch_code . ' = ' . $page_id;
-        }
-
-        return implode("\n", $clean);
+        $map[$branch_code] = $page_id;
     }
 
-    /**
-     * Return mapping array: branch_code => page_id from settings.
-     *
-     * @return array<string,int>
-     */
-    private function get_branch_home_map(): array {
-        $opt = get_option(self::OPT, []);
-        $raw = isset($opt['branch_home_map_raw']) ? (string)$opt['branch_home_map_raw'] : '';
+    return $map;
+}
 
-        $map = [];
-        foreach (preg_split('/\r\n|\r|\n/', $raw) as $line) {
-            $line = trim($line);
-            if ($line === '') continue;
-
-            $parts = explode('=', $line, 2);
-            if (count($parts) !== 2) continue;
-
-            $branch_code = preg_replace('/\D+/', '', trim($parts[0]));
-            $page_id     = (int) trim($parts[1]);
-
-            if ($branch_code === '' || $page_id <= 0) continue;
-
-            $map[$branch_code] = $page_id;
-        }
-
-        return $map;
+public function maybe_redirect_branch_home(): void {
+    if (!is_user_logged_in()) {
+        return;
     }
 
-    /**
-     * Redirect logged-in users from the default front page to a branch-specific page,
-     * if a mapping is configured for their branch code.
-     */
-    public function maybe_redirect_branch_home(): void {
-        if (!is_user_logged_in()) {
-            return;
-        }
-
-        if (!is_front_page() && !is_home()) {
-            return;
-        }
-
-        $user_id = get_current_user_id();
-        if ($user_id <= 0) {
-            return;
-        }
-
-        $branch_code = get_user_meta($user_id, self::META_BRANCH, true);
-        $branch_code = is_string($branch_code) ? preg_replace('/\D+/', '', $branch_code) : '';
-
-        if ($branch_code === '') {
-            return;
-        }
-
-        $map = $this->get_branch_home_map();
-        if (empty($map[$branch_code])) {
-            return;
-        }
-
-        $page_id = (int) $map[$branch_code];
-        if ($page_id <= 0) {
-            return;
-        }
-
-        if (is_page($page_id)) {
-            return;
-        }
-
-        $url = get_permalink($page_id);
-        if (!$url) {
-            return;
-        }
-
-        $url = apply_filters('company_suite/branch_home_redirect_url', $url, $branch_code, $user_id, $page_id);
-        if (!$url) {
-            return;
-        }
-
-        wp_safe_redirect($url);
-        exit;
+    if (!is_front_page() && !is_home()) {
+        return;
     }
 
+    $user_id = get_current_user_id();
+    if ($user_id <= 0) {
+        return;
+    }
+
+    $branch_code = get_user_meta($user_id, self::META_BRANCH, true);
+    $branch_code = is_string($branch_code) ? preg_replace('/\D+/', '', $branch_code) : '';
+
+    if ($branch_code === '') {
+        return;
+    }
+
+    $map = $this->get_branch_home_map();
+    if (empty($map[$branch_code])) {
+        return;
+    }
+
+    $page_id = (int) $map[$branch_code];
+    if ($page_id <= 0) {
+        return;
+    }
+
+    if (is_page($page_id)) {
+        return;
+    }
+
+    $url = get_permalink($page_id);
+    if (!$url) {
+        return;
+    }
+
+    $url = apply_filters('company_suite/branch_home_redirect_url', $url, $branch_code, $user_id, $page_id);
+    if (!$url) {
+        return;
+    }
+
+    wp_safe_redirect($url);
+    exit;
+}
 }
