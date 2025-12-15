@@ -18,7 +18,13 @@ if (!defined('IKO_CS_URL')) {
     define('IKO_CS_URL', plugin_dir_url(__FILE__));
 }
 
-// Includes
+// ============================================
+// STEP 1: ADD NEW HELPER FILE HERE
+// ============================================
+// ADD THIS LINE BEFORE OTHER INCLUDES:
+require_once IKO_CS_DIR . 'inc/company-suite-helpers.php';
+
+// Includes (existing files)
 require_once IKO_CS_DIR . 'inc/class-ev-elementor-vacations.php';
 require_once IKO_CS_DIR . 'inc/class-ev-elementor-vacations-autofill.php';
 require_once IKO_CS_DIR . 'inc/class-ev-company-suite-own-branch.php';
